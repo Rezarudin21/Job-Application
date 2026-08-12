@@ -1,0 +1,240 @@
+/**
+ * Sets up the "Applications" sheet.
+ *
+ * This function:
+ * - Creates the table headers.
+ * - Adds a dropdown menu to the Status column.
+ * - Applies basic formatting to the header.
+ * - Sets the column widths for better readability.
+ *
+ * Expected sheet name:
+ * "Applications"
+ */
+function setupSheet() {
+
+  const sheet =
+    SpreadsheetApp
+      .getActiveSpreadsheet()
+      .getSheetByName("Applications");
+
+
+  // ---------------------------------------------------
+  // Table Headers
+  // ---------------------------------------------------
+
+  sheet.getRange("A1:E1").setValues([[
+    "Date",
+    "Company",
+    "Position",
+    "Status",
+    "URL"
+  ]]);
+
+
+  // ---------------------------------------------------
+  // Status Dropdown
+  // ---------------------------------------------------
+
+  const rule =
+    SpreadsheetApp
+      .newDataValidation()
+      .requireValueInList(
+        [
+          "Applied",
+          "Interview",
+          "Rejected",
+          "Offer"
+        ],
+        true
+      )
+      .setAllowInvalid(false)
+      .build();
+
+
+  sheet
+    .getRange("D2:D")
+    .setDataValidation(rule);
+
+
+  // ---------------------------------------------------
+  // Header Formatting
+  // ---------------------------------------------------
+
+  sheet
+    .getRange("A1:E1")
+    .setFontWeight("bold");
+
+
+  // ---------------------------------------------------
+  // Column Widths
+  // ---------------------------------------------------
+
+  sheet.setColumnWidths(
+    1,
+    5,
+    220
+  );
+}
+
+
+
+/**
+ * Handles POST requests sent to the Google Apps Script Web App.
+ *
+ * The endpoint expects a "payload" parameter containing
+ * a JSON object with the following properties:
+ *
+ * {
+ *   company: "Company Name",
+ *   position: "Job Position",
+ *   url: "Job URL"
+ * }
+ *
+ * The received application data is appended to the
+ * "Applications" sheet with the default status "Applied".
+ *
+ * @param {Object} e - Google Apps Script HTTP POST event object.
+ * @returns {TextOutput} JSON response indicating success or failure.
+ */
+function doPost(e) {
+
+  try {
+
+    console.log(
+      "===== doPost called ====="
+    );
+
+
+    // -------------------------------------------------
+    // Validate Event Object
+    // -------------------------------------------------
+
+    if (!e) {
+
+      throw new Error(
+        "Event object is not available. " +
+        "Do not run doPost() manually."
+      );
+    }
+
+
+    console.log(
+      "Request parameters:",
+      e.parameter
+    );
+
+
+    // -------------------------------------------------
+    // Get Applications Sheet
+    // -------------------------------------------------
+
+    const sheet =
+      SpreadsheetApp
+        .getActiveSpreadsheet()
+        .getSheetByName("Applications");
+
+
+    if (!sheet) {
+
+      throw new Error(
+        'Sheet "Applications" was not found.'
+      );
+    }
+
+
+    // -------------------------------------------------
+    // Validate Payload
+    // -------------------------------------------------
+
+    if (!e.parameter.payload) {
+
+      throw new Error(
+        "Payload parameter was not provided."
+      );
+    }
+
+
+    // -------------------------------------------------
+    // Parse JSON Payload
+    // -------------------------------------------------
+
+    const data =
+      JSON.parse(
+        e.parameter.payload
+      );
+
+
+    console.log(
+      "Received application data:",
+      data
+    );
+
+
+    // -------------------------------------------------
+    // Save Application
+    // -------------------------------------------------
+
+    sheet.appendRow([
+      new Date(),
+      data.company || "",
+      data.position || "",
+      "Applied",
+      data.url || ""
+    ]);
+
+
+    // -------------------------------------------------
+    // Success Response
+    // -------------------------------------------------
+
+    return ContentService
+      .createTextOutput(
+        JSON.stringify({
+
+          success: true,
+
+          message:
+            "Application data saved successfully.",
+
+          data: data
+
+        })
+      )
+      .setMimeType(
+        ContentService.MimeType.JSON
+      );
+
+
+  } catch (error) {
+
+
+    // -------------------------------------------------
+    // Error Logging
+    // -------------------------------------------------
+
+    console.error(
+      "ERROR:",
+      error.message
+    );
+
+
+    // -------------------------------------------------
+    // Error Response
+    // -------------------------------------------------
+
+    return ContentService
+      .createTextOutput(
+        JSON.stringify({
+
+          success: false,
+
+          error:
+            error.message
+
+        })
+      )
+      .setMimeType(
+        ContentService.MimeType.JSON
+      );
+  }
+}
