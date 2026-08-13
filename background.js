@@ -1,145 +1,392 @@
-console.log("JobStreet Tracker background aktif");
+// =====================================================
+// JOB APPLICATION TRACKER
+// BACKGROUND SERVICE WORKER V2.1
+// =====================================================
+
+console.log(
+  "🚀 JobStreet Tracker Background aktif"
+);
 
 
 // =====================================================
-// URL GOOGLE APPS SCRIPT
+// GOOGLE APPS SCRIPT
 // =====================================================
 
-const WEB_APP_URL =
+const GOOGLE_SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbzE9LJ3UsQPN-hOFqEUt37rzyXCy6jjYR8GlUHXXtMhtAZeN8rmLnywKxNdEaxZZn62/exec";
 
 
 // =====================================================
-// TERIMA DATA DARI CONTENT.JS
+// CONFIG
+// =====================================================
+
+const MAX_RETRIES = 3;
+
+const RETRY_DELAY = 1500;
+
+
+// =====================================================
+// MESSAGE LISTENER
 // =====================================================
 
 chrome.runtime.onMessage.addListener(
-  function(message, sender, sendResponse) {
+  (message, sender, sendResponse) => {
+
+    console.log(
+      "📨 Message diterima:",
+      message
+    );
+
 
     if (
       !message ||
-      message.action !== "saveApplication"
+      message.action !==
+        "saveApplication"
     ) {
+
       return;
+
     }
 
 
-    const data = message.data;
-
-
-    console.log(
-      "📦 Data diterima background:",
-      data
-    );
-
-
-    // -------------------------------------------------
-    // VALIDASI
-    // -------------------------------------------------
-
-    if (!data) {
+    if (!message.data) {
 
       sendResponse({
+
         success: false,
-        error: "Data kosong"
+
+        error:
+          "Data application kosong."
+
       });
 
       return;
+
     }
 
 
-    if (!data.company || !data.position) {
+    saveApplication(
+      message.data
+    )
+      .then(
+        (result) => {
+
+          console.log(
+            "✅ Save result:",
+            result
+          );
+
+          sendResponse(
+            result
+          );
+
+        }
+      )
+      .catch(
+        (error) => {
+
+          console.error(
+            "❌ Save error:",
+            error
+          );
+
+          sendResponse({
+
+            success: false,
+
+            error:
+              error.message ||
+              String(error)
+
+          });
+
+        }
+      );
+
+
+    // Sangat penting untuk async response.
+    return true;
+
+  }
+);
+
+
+// =====================================================
+// SAVE APPLICATION
+// =====================================================
+
+async function saveApplication(
+  data
+) {
+
+  const payload = {
+
+    company:
+      String(
+        data.company || ""
+      ).trim(),
+
+    position:
+      String(
+        data.position || ""
+      ).trim(),
+
+    url:
+      String(
+        data.url || ""
+      ).trim(),
+
+    jobId:
+      String(
+        data.jobId || ""
+      ).trim()
+
+  };
+
+
+  console.log(
+    "📦 Payload final:",
+    payload
+  );
+
+
+  // ---------------------------------------------------
+  // Pastikan ada minimal data
+  // ---------------------------------------------------
+
+  if (
+    !payload.company &&
+    !payload.position &&
+    !payload.url
+  ) {
+
+    throw new Error(
+      "Tidak ada data job yang valid."
+    );
+
+  }
+
+
+  // ---------------------------------------------------
+  // Coba kirim beberapa kali
+  // ---------------------------------------------------
+
+  let lastError =
+    null;
+
+
+  for (
+    let attempt = 1;
+    attempt <= MAX_RETRIES;
+    attempt++
+  ) {
+
+    try {
+
+      console.log(
+        `📤 Sending attempt ${attempt}/${MAX_RETRIES}`
+      );
+
+
+      const result =
+        await sendToGoogleSheets(
+          payload
+        );
+
+
+      if (
+        result &&
+        result.success
+      ) {
+
+        return result;
+
+      }
+
+
+      throw new Error(
+        result.error ||
+        "Unknown Google Sheets error."
+      );
+
+
+    } catch (error) {
+
+      lastError =
+        error;
+
 
       console.warn(
-        "⚠️ Data perusahaan atau posisi kosong:",
-        data
+        `⚠️ Attempt ${attempt} gagal:`,
+        error.message
       );
+
+
+      if (
+        attempt <
+        MAX_RETRIES
+      ) {
+
+        await sleep(
+          RETRY_DELAY * attempt
+        );
+
+      }
+
     }
 
-
-    // -------------------------------------------------
-    // KIRIM KE GOOGLE APPS SCRIPT
-    // -------------------------------------------------
-
-    const payload =
-      JSON.stringify(data);
+  }
 
 
-    const body =
-      new URLSearchParams();
+  throw lastError ||
+    new Error(
+      "Gagal menyimpan application."
+    );
 
-    body.append(
-      "payload",
+}
+
+
+// =====================================================
+// SEND TO GOOGLE SHEETS
+// =====================================================
+
+async function sendToGoogleSheets(
+  payload
+) {
+
+  const formData =
+    new URLSearchParams();
+
+
+  formData.append(
+    "payload",
+    JSON.stringify(
       payload
+    )
+  );
+
+
+  console.log(
+    "🌐 POST:",
+    GOOGLE_SCRIPT_URL
+  );
+
+
+  const response =
+    await fetch(
+      GOOGLE_SCRIPT_URL,
+      {
+
+        method:
+          "POST",
+
+        headers: {
+
+          "Content-Type":
+            "application/x-www-form-urlencoded;charset=UTF-8"
+
+        },
+
+        body:
+          formData.toString(),
+
+        redirect:
+          "follow"
+
+      }
     );
 
 
-    fetch(
-      WEB_APP_URL,
-      {
-        method: "POST",
-
-        headers: {
-          "Content-Type":
-            "application/x-www-form-urlencoded"
-        },
-
-        body: body.toString(),
-
-        redirect: "follow"
-      }
-    )
-    .then(async response => {
-
-      const text =
-        await response.text();
+  console.log(
+    "📡 HTTP:",
+    response.status
+  );
 
 
-      console.log(
-        "📨 Response Google Apps Script:",
+  const text =
+    await response.text();
+
+
+  console.log(
+    "📥 Apps Script response:",
+    text
+  );
+
+
+  if (
+    !response.ok
+  ) {
+
+    throw new Error(
+      `HTTP ${response.status}`
+    );
+
+  }
+
+
+  let result;
+
+
+  try {
+
+    result =
+      JSON.parse(
         text
       );
 
+  } catch (error) {
 
-      let result;
+    throw new Error(
+      "Response Apps Script bukan JSON."
+    );
 
-
-      try {
-
-        result =
-          JSON.parse(text);
-
-      } catch (error) {
-
-        result = {
-          success: false,
-          error:
-            "Response bukan JSON",
-          response: text
-        };
-      }
-
-
-      sendResponse(result);
-
-    })
-    .catch(error => {
-
-      console.error(
-        "❌ Gagal mengirim ke Google Sheet:",
-        error
-      );
-
-
-      sendResponse({
-        success: false,
-        error: error.message
-      });
-
-    });
-
-
-    // Penting karena fetch asynchronous
-    return true;
   }
-);
+
+
+  if (
+    !result.success
+  ) {
+
+    throw new Error(
+      result.error ||
+      "Apps Script gagal menyimpan."
+    );
+
+  }
+
+
+  return {
+
+    success:
+      true,
+
+    message:
+      result.message ||
+      "Application berhasil disimpan.",
+
+    data:
+      result.data ||
+      payload
+
+  };
+
+}
+
+
+// =====================================================
+// SLEEP
+// =====================================================
+
+function sleep(
+  milliseconds
+) {
+
+  return new Promise(
+    resolve =>
+      setTimeout(
+        resolve,
+        milliseconds
+      )
+  );
+
+}

@@ -1,177 +1,717 @@
+// =====================================================
+// JOB APPLICATION TRACKER
+// CONTENT SCRIPT V2.1
+// =====================================================
+
 console.log("🚀 JobStreet Apply Tracker aktif");
+
+
+// =====================================================
+// EXTENSION CONTEXT CHECK
+// =====================================================
+
+function isExtensionContextValid() {
+  try {
+    return (
+      typeof chrome !== "undefined" &&
+      chrome.runtime &&
+      chrome.runtime.id
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
+
+// =====================================================
+// SAFE MESSAGE
+// =====================================================
+
+function sendMessageSafely(message) {
+
+  return new Promise((resolve) => {
+
+    if (!isExtensionContextValid()) {
+
+      console.warn(
+        "⚠️ Extension context tidak tersedia."
+      );
+
+      resolve({
+        success: false,
+        error: "Extension context unavailable"
+      });
+
+      return;
+    }
+
+    try {
+
+      chrome.runtime.sendMessage(
+        message,
+        (response) => {
+
+          if (chrome.runtime.lastError) {
+
+            console.warn(
+              "⚠️ Runtime message:",
+              chrome.runtime.lastError.message
+            );
+
+            resolve({
+              success: false,
+              error:
+                chrome.runtime.lastError.message
+            });
+
+            return;
+          }
+
+          resolve(
+            response || {
+              success: false,
+              error: "No response"
+            }
+          );
+
+        }
+      );
+
+    } catch (error) {
+
+      console.error(
+        "❌ sendMessage error:",
+        error
+      );
+
+      resolve({
+        success: false,
+        error: error.message
+      });
+
+    }
+
+  });
+
+}
+
+
+// =====================================================
+// EXTRACT JOB ID
+// =====================================================
+
+function extractJobIdFromUrl(url) {
+
+  if (!url) {
+    return "";
+  }
+
+  // /job/93902797
+  // /id/job/93902797
+
+  let match = url.match(
+    /\/(?:id\/)?job\/(\d+)/i
+  );
+
+  if (
+    match &&
+    match[1]
+  ) {
+
+    return match[1];
+
+  }
+
+
+  // ?jobId=93902797
+
+  match = url.match(
+    /[?&]jobId=(\d+)/i
+  );
+
+  if (
+    match &&
+    match[1]
+  ) {
+
+    return match[1];
+
+  }
+
+
+  return "";
+}
+
+
+// =====================================================
+// FIND JOB LINK INSIDE CONTAINER
+// =====================================================
+
+function findJobIdInContainer(container) {
+
+  if (!container) {
+    return "";
+  }
+
+  const links =
+    container.querySelectorAll(
+      "a[href]"
+    );
+
+  for (const link of links) {
+
+    const href =
+      link.href ||
+      link.getAttribute("href") ||
+      "";
+
+    const jobId =
+      extractJobIdFromUrl(href);
+
+    if (jobId) {
+      return jobId;
+    }
+
+  }
+
+  return "";
+}
+
+
+// =====================================================
+// FIND NEAREST JOB CARD
+// =====================================================
+
+function findJobCard(element) {
+
+  if (!element) {
+    return null;
+  }
+
+  let current =
+    element;
+
+  for (
+    let i = 0;
+    i < 12 && current;
+    i++
+  ) {
+
+    // -----------------------------------------------
+    // Cari link job di container ini
+    // -----------------------------------------------
+
+    const jobId =
+      findJobIdInContainer(
+        current
+      );
+
+    if (jobId) {
+      return current;
+    }
+
+    // -----------------------------------------------
+    // Naik satu level
+    // -----------------------------------------------
+
+    current =
+      current.parentElement;
+  }
+
+  return null;
+}
+
+
+// =====================================================
+// FIND JOB ID FROM CLICKED CARD
+// =====================================================
+
+function findJobIdFromClickedCard(
+  clickedElement
+) {
+
+  // -----------------------------------------------
+  // 1. Cari card terdekat
+  // -----------------------------------------------
+
+  const card =
+    findJobCard(
+      clickedElement
+    );
+
+  if (card) {
+
+    const jobId =
+      findJobIdInContainer(
+        card
+      );
+
+    if (jobId) {
+
+      console.log(
+        "🎯 Job ID ditemukan dari card:",
+        jobId
+      );
+
+      return jobId;
+    }
+  }
+
+
+  // -----------------------------------------------
+  // 2. Coba parent langsung
+  // -----------------------------------------------
+
+  let parent =
+    clickedElement;
+
+  for (
+    let i = 0;
+    i < 8 && parent;
+    i++
+  ) {
+
+    const links =
+      parent.querySelectorAll(
+        "a[href]"
+      );
+
+    for (const link of links) {
+
+      const jobId =
+        extractJobIdFromUrl(
+          link.href
+        );
+
+      if (jobId) {
+
+        console.log(
+          "🎯 Job ID ditemukan dari parent:",
+          jobId
+        );
+
+        return jobId;
+      }
+
+    }
+
+    parent =
+      parent.parentElement;
+  }
+
+
+  return "";
+}
+
+
+// =====================================================
+// FIND POSITION FROM CARD
+// =====================================================
+
+function getPositionFromCard(
+  card
+) {
+
+  if (!card) {
+    return "";
+  }
+
+  const selectors = [
+
+    '[data-automation="job-detail-title"]',
+
+    '[data-automation="job-title"]',
+
+    '[data-automation="job-listing-title"]',
+
+    '[data-automation="jobTitle"]',
+
+    "h1",
+
+    "h2",
+
+    "h3"
+
+  ];
+
+
+  for (
+    const selector of selectors
+  ) {
+
+    const element =
+      card.querySelector(
+        selector
+      );
+
+    if (
+      element &&
+      element.innerText &&
+      element.innerText.trim()
+    ) {
+
+      return element.innerText.trim();
+
+    }
+
+  }
+
+
+  // -----------------------------------------------
+  // Fallback: cari link job
+  // -----------------------------------------------
+
+  const links =
+    card.querySelectorAll(
+      "a[href]"
+    );
+
+  for (const link of links) {
+
+    const jobId =
+      extractJobIdFromUrl(
+        link.href
+      );
+
+    if (
+      jobId &&
+      link.innerText &&
+      link.innerText.trim()
+    ) {
+
+      return link.innerText.trim();
+
+    }
+
+  }
+
+
+  return "";
+}
+
+
+// =====================================================
+// FIND COMPANY FROM CARD
+// =====================================================
+
+function getCompanyFromCard(
+  card
+) {
+
+  if (!card) {
+    return "";
+  }
+
+  const selectors = [
+
+    '[data-automation="advertiser-name"]',
+
+    '[data-automation="job-detail-advertiser"]',
+
+    '[data-automation="company-name"]',
+
+    '[data-automation="job-detail-company-name"]',
+
+    '[data-automation*="advertiser"]',
+
+    '[data-automation*="company"]'
+
+  ];
+
+
+  for (
+    const selector of selectors
+  ) {
+
+    const elements =
+      card.querySelectorAll(
+        selector
+      );
+
+    for (const element of elements) {
+
+      if (
+        element &&
+        element.innerText &&
+        element.innerText.trim()
+      ) {
+
+        return element.innerText.trim();
+
+      }
+
+    }
+
+  }
+
+
+  // -----------------------------------------------
+  // Fallback: span
+  // -----------------------------------------------
+
+  const spans =
+    card.querySelectorAll(
+      "span"
+    );
+
+  for (const span of spans) {
+
+    const automation =
+      span.getAttribute(
+        "data-automation"
+      ) || "";
+
+    if (
+      automation
+        .toLowerCase()
+        .includes("advertiser")
+    ) {
+
+      const text =
+        span.innerText.trim();
+
+      if (text) {
+        return text;
+      }
+
+    }
+
+  }
+
+
+  return "";
+}
+
+
+// =====================================================
+// FIND DETAIL PAGE INFORMATION
+// =====================================================
+
+function getPositionFromPage() {
+
+  const selectors = [
+
+    '[data-automation="job-detail-title"]',
+
+    'h1[data-automation="job-detail-title"]',
+
+    'h1[data-automation="job-detail-title-heading"]',
+
+    "h1"
+
+  ];
+
+
+  for (
+    const selector of selectors
+  ) {
+
+    const element =
+      document.querySelector(
+        selector
+      );
+
+    if (
+      element &&
+      element.innerText &&
+      element.innerText.trim()
+    ) {
+
+      return element.innerText.trim();
+
+    }
+
+  }
+
+  return "";
+}
+
+
+function getCompanyFromPage() {
+
+  const selectors = [
+
+    '[data-automation="advertiser-name"]',
+
+    '[data-automation="job-detail-advertiser"]',
+
+    '[data-automation="company-name"]',
+
+    '[data-automation="job-detail-company-name"]'
+
+  ];
+
+
+  for (
+    const selector of selectors
+  ) {
+
+    const element =
+      document.querySelector(
+        selector
+      );
+
+    if (
+      element &&
+      element.innerText &&
+      element.innerText.trim()
+    ) {
+
+      return element.innerText.trim();
+
+    }
+
+  }
+
+
+  return "";
+}
+
+
+// =====================================================
+// BUILD CLEAN JOB URL
+// =====================================================
+
+function buildJobUrl(
+  jobId
+) {
+
+  if (!jobId) {
+    return "";
+  }
+
+  return (
+    "https://id.jobstreet.com/id/job/" +
+    jobId
+  );
+
+}
 
 
 // =====================================================
 // GET JOB INFORMATION
 // =====================================================
 
-function getJobInfo() {
+function getJobInfo(
+  clickedElement
+) {
 
-  const currentUrl = window.location.href;
-
-  console.log("🌐 URL saat ini:", currentUrl);
-
-
-  // ===================================================
-  // GET JOB ID
-  // ===================================================
-
-  let jobId = "";
-
-  const urlMatch = currentUrl.match(
-    /\/(?:id\/)?job\/(\d+)/
+  console.log(
+    "🔍 Mencari informasi job dari tombol yang diklik..."
   );
 
-  if (urlMatch && urlMatch[1]) {
 
-    jobId = urlMatch[1];
+  // ===================================================
+  // 1. FIND CARD
+  // ===================================================
 
-    console.log("🆔 Job ID ditemukan:", jobId);
-  }
+  const card =
+    findJobCard(
+      clickedElement
+    );
+
+
+  console.log(
+    "🃏 Job card:",
+    card
+  );
 
 
   // ===================================================
-  // FALLBACK: CARI JOB ID DARI LINK
+  // 2. FIND JOB ID FROM CARD
+  // ===================================================
+
+  let jobId =
+    findJobIdFromClickedCard(
+      clickedElement
+    );
+
+
+  // ===================================================
+  // 3. ONLY USE CURRENT URL IF IT IS A JOB DETAIL PAGE
   // ===================================================
 
   if (!jobId) {
 
-    const jobLinks = document.querySelectorAll(
-      'a[href*="/job/"]'
-    );
+    const currentUrl =
+      window.location.href;
 
-    for (const link of jobLinks) {
-
-      const href = link.href || "";
-
-      const linkMatch = href.match(
-        /\/(?:id\/)?job\/(\d+)/
+    const currentUrlJobId =
+      extractJobIdFromUrl(
+        currentUrl
       );
 
-      if (linkMatch && linkMatch[1]) {
+    if (currentUrlJobId) {
 
-        jobId = linkMatch[1];
+      jobId =
+        currentUrlJobId;
 
-        console.log(
-          "🆔 Job ID ditemukan dari link:",
-          jobId
-        );
+      console.log(
+        "🎯 Job ID dari detail page:",
+        jobId
+      );
 
-        break;
-      }
     }
+
   }
 
 
   // ===================================================
-  // BUAT URL JOBSTREET BERSIH
-  // ===================================================
-
-  let jobUrl = currentUrl;
-
-  if (jobId) {
-
-    jobUrl =
-      `https://id.jobstreet.com/id/job/${jobId}`;
-  }
-
-
-  console.log(
-    "🔗 URL job:",
-    jobUrl
-  );
-
-
-  // ===================================================
-  // GET POSITION
+  // 4. POSITION
   // ===================================================
 
   let position = "";
 
-  const positionSelectors = [
+  if (card) {
 
-    '[data-automation="job-detail-title"]',
+    position =
+      getPositionFromCard(
+        card
+      );
 
-    'h1[data-automation="job-detail-title"]',
-
-    'h1'
-
-  ];
+  }
 
 
-  for (const selector of positionSelectors) {
+  if (!position) {
 
-    const element =
-      document.querySelector(selector);
+    position =
+      getPositionFromPage();
 
-    if (
-      element &&
-      element.innerText.trim()
-    ) {
-
-      position =
-        element.innerText.trim();
-
-      break;
-    }
   }
 
 
   // ===================================================
-  // GET COMPANY
+  // 5. COMPANY
   // ===================================================
 
   let company = "";
 
-  const companySelectors = [
+  if (card) {
 
-    '[data-automation="advertiser-name"]',
+    company =
+      getCompanyFromCard(
+        card
+      );
 
-    '[data-automation="job-detail-advertiser"]',
-
-    '[data-automation="company-name"]'
-
-  ];
-
-
-  for (const selector of companySelectors) {
-
-    const element =
-      document.querySelector(selector);
-
-    if (
-      element &&
-      element.innerText.trim()
-    ) {
-
-      company =
-        element.innerText.trim();
-
-      break;
-    }
   }
 
-
-  // ===================================================
-  // FALLBACK COMPANY
-  // ===================================================
 
   if (!company) {
 
-    const advertiser =
-      document.querySelector(
-        '[data-automation="advertiser-name"]'
-      );
+    company =
+      getCompanyFromPage();
 
-    if (
-      advertiser &&
-      advertiser.innerText.trim()
-    ) {
-
-      company =
-        advertiser.innerText.trim();
-    }
   }
+
+
+  // ===================================================
+  // 6. URL
+  // ===================================================
+
+  const url =
+    buildJobUrl(
+      jobId
+    );
 
 
   // ===================================================
@@ -180,33 +720,39 @@ function getJobInfo() {
 
   const result = {
 
-    jobId: jobId,
+    jobId:
+      jobId,
 
-    company: company,
+    company:
+      company,
 
-    position: position,
+    position:
+      position,
 
-    url: jobUrl
+    url:
+      url
 
   };
 
 
   console.log(
-    "📦 DATA YANG DITEMUKAN:",
+    "📦 DATA FINAL:",
     result
   );
 
 
   return result;
+
 }
 
 
-
 // =====================================================
-// DETECT APPLY BUTTON
+// APPLY BUTTON DETECTION
 // =====================================================
 
-function isApplyButton(element) {
+function isApplyButton(
+  element
+) {
 
   if (!element) {
     return false;
@@ -218,6 +764,10 @@ function isApplyButton(element) {
     element.innerText ||
 
     element.textContent ||
+
+    element.getAttribute(
+      "aria-label"
+    ) ||
 
     ""
 
@@ -235,6 +785,8 @@ function isApplyButton(element) {
 
     "lamaran cepat",
 
+    "lamar cepat",
+
     "quick apply",
 
     "apply",
@@ -245,230 +797,303 @@ function isApplyButton(element) {
 
 
   return applyWords.some(
-    word =>
-      text === word ||
-      text.includes(word)
+    (word) => {
+
+      return (
+        text === word ||
+        text.includes(word)
+      );
+
+    }
   );
+
 }
 
+
+// =====================================================
+// FIND CLICKABLE ELEMENT
+// =====================================================
+
+function findClickableElement(
+  target
+) {
+
+  let element =
+    target;
+
+
+  for (
+    let i = 0;
+    i < 10 && element;
+    i++
+  ) {
+
+    if (
+
+      element.tagName ===
+        "BUTTON" ||
+
+      element.tagName ===
+        "A" ||
+
+      element.getAttribute(
+        "role"
+      ) === "button"
+
+    ) {
+
+      return element;
+
+    }
+
+
+    element =
+      element.parentElement;
+
+  }
+
+
+  return null;
+
+}
+
+
+// =====================================================
+// DUPLICATE PROTECTION
+// =====================================================
+
+let lastApplicationKey =
+  "";
+
+let lastApplicationTime =
+  0;
 
 
 // =====================================================
 // HANDLE APPLY
 // =====================================================
 
-function handleApplyClick(element) {
+async function handleApplyClick(
+  element
+) {
 
   console.log(
-    "🟢 APPLY TERDETEKSI:",
-    element.innerText
+    "🟢 APPLY TERDETEKSI"
   );
 
 
-  // Ambil informasi sebelum halaman berubah
-  const data = getJobInfo();
+  // IMPORTANT:
+  // Ambil data SEBELUM JobStreet
+  // mengubah UI/page.
+
+  const data =
+    getJobInfo(
+      element
+    );
 
 
   console.log(
-    "📤 DATA AKAN DIKIRIM:",
+    "📦 Data yang akan dikirim:",
     data
   );
 
 
   // ===================================================
-  // VALIDASI
+  // VALIDATION
   // ===================================================
 
   if (!data.jobId) {
 
     console.warn(
-      "⚠️ Job ID tidak ditemukan"
+      "⚠️ Job ID tidak ditemukan."
     );
+
+    return;
+
   }
 
-  if (!data.company) {
-
-    console.warn(
-      "⚠️ Nama perusahaan tidak ditemukan"
-    );
-  }
 
   if (!data.position) {
 
     console.warn(
-      "⚠️ Posisi tidak ditemukan"
+      "⚠️ Position tidak ditemukan."
     );
+
+  }
+
+
+  if (!data.company) {
+
+    console.warn(
+      "⚠️ Company tidak ditemukan."
+    );
+
   }
 
 
   // ===================================================
-  // KIRIM KE BACKGROUND
+  // DUPLICATE KEY
   // ===================================================
 
-  chrome.runtime.sendMessage(
+  const applicationKey = [
 
-    {
-      action: "saveApplication",
-      data: data
-    },
+    data.jobId,
 
-    function(response) {
+    data.company,
 
-      if (chrome.runtime.lastError) {
+    data.position
 
-        console.error(
-          "❌ Background error:",
-          chrome.runtime.lastError.message
-        );
-
-        return;
-      }
+  ].join("|");
 
 
-      console.log(
-        "📨 Response dari background:",
-        response
-      );
-    }
+  const now =
+    Date.now();
+
+
+  if (
+
+    applicationKey ===
+      lastApplicationKey &&
+
+    now -
+      lastApplicationTime <
+      5000
+
+  ) {
+
+    console.log(
+      "⏭️ Duplicate click diabaikan."
+    );
+
+    return;
+
+  }
+
+
+  lastApplicationKey =
+    applicationKey;
+
+  lastApplicationTime =
+    now;
+
+
+  // ===================================================
+  // SEND
+  // ===================================================
+
+  const response =
+    await sendMessageSafely({
+
+      action:
+        "saveApplication",
+
+      data:
+        data
+
+    });
+
+
+  console.log(
+    "📨 Background response:",
+    response
   );
+
+
+  if (
+    response &&
+    response.success
+  ) {
+
+    console.log(
+      "✅ Application berhasil disimpan ke Google Sheet!"
+    );
+
+  } else {
+
+    console.warn(
+      "⚠️ Application belum berhasil dikirim:",
+      response
+    );
+
+  }
+
 }
 
 
+// =====================================================
+// GLOBAL CLICK HANDLER
+// =====================================================
+
+function handleGlobalClick(
+  event
+) {
+
+  const element =
+    findClickableElement(
+      event.target
+    );
+
+
+  if (!element) {
+    return;
+  }
+
+
+  if (
+    !isApplyButton(
+      element
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  // Jalankan tanpa blocking UI JobStreet.
+
+  handleApplyClick(
+    element
+  );
+
+}
+
 
 // =====================================================
-// GLOBAL CLICK LISTENER
+// INITIALIZE
 // =====================================================
+
+let trackerInitialized =
+  false;
+
 
 function initializeTracker() {
 
-  console.log(
-    "🔧 Mengaktifkan click listener..."
-  );
+  if (
+    trackerInitialized
+  ) {
+
+    return;
+
+  }
+
+
+  trackerInitialized =
+    true;
 
 
   document.addEventListener(
     "click",
-
-    function(event) {
-
-      let element =
-        event.target;
-
-
-      // Naik ke parent
-      // untuk mencari BUTTON/A
-      for (
-        let i = 0;
-        i < 8 && element;
-        i++
-      ) {
-
-        if (
-
-          element.tagName === "BUTTON" ||
-
-          element.tagName === "A" ||
-
-          element.getAttribute("role") === "button"
-
-        ) {
-
-          break;
-        }
-
-
-        element =
-          element.parentElement;
-      }
-
-
-      if (!element) {
-        return;
-      }
-
-
-      // =================================================
-      // CEK APAKAH APPLY
-      // =================================================
-
-      if (!isApplyButton(element)) {
-        return;
-      }
-
-
-      // =================================================
-      // APPLY
-      // =================================================
-
-      handleApplyClick(element);
-
-    },
-
+    handleGlobalClick,
     true
   );
 
 
   console.log(
-    "✅ Click listener aktif"
+    "✅ JobStreet Apply Tracker listener aktif"
   );
+
 }
-
-
-
-// =====================================================
-// MONITOR URL
-// =====================================================
-
-let lastUrl = location.href;
-
-
-function monitorUrl() {
-
-  const currentUrl =
-    location.href;
-
-
-  if (currentUrl !== lastUrl) {
-
-    console.log(
-      "🔄 URL JobStreet berubah:",
-      currentUrl
-    );
-
-
-    lastUrl =
-      currentUrl;
-  }
-}
-
-
-
-// =====================================================
-// START MONITORING
-// =====================================================
-
-function startMonitoring() {
-
-  console.log(
-    "🚀 Memulai JobStreet Tracker..."
-  );
-
-
-  initializeTracker();
-
-
-  // Monitor URL
-  setInterval(
-    monitorUrl,
-    1000
-  );
-
-
-  console.log(
-    "👀 JobStreet Tracker siap digunakan"
-  );
-}
-
 
 
 // =====================================================
@@ -476,16 +1101,20 @@ function startMonitoring() {
 // =====================================================
 
 if (
-  document.readyState === "loading"
+  document.readyState ===
+  "loading"
 ) {
 
   document.addEventListener(
     "DOMContentLoaded",
-    startMonitoring
+    initializeTracker,
+    {
+      once: true
+    }
   );
 
 } else {
 
-  startMonitoring();
+  initializeTracker();
 
 }

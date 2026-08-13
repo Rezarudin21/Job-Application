@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
 
-  "name": "JobStreet Apply Tracker",
+  "name": "Job Application Tracker",
 
-  "version": "1.0",
+  "version": "2.1.0",
 
-  "description": "Menyimpan lamaran JobStreet otomatis ke Google Sheets",
+  "description": "Automatically tracks JobStreet job applications and saves them to Google Sheets.",
 
   "permissions": [
     "storage"

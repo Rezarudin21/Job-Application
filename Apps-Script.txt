@@ -1,40 +1,21 @@
-/**
- * Sets up the "Applications" sheet.
- *
- * This function:
- * - Creates the table headers.
- * - Adds a dropdown menu to the Status column.
- * - Applies basic formatting to the header.
- * - Sets the column widths for better readability.
- *
- * Expected sheet name:
- * "Applications"
- */
 function setupSheet() {
-
   const sheet =
     SpreadsheetApp
       .getActiveSpreadsheet()
       .getSheetByName("Applications");
 
+  // Header
+  sheet
+    .getRange("A1:E1")
+    .setValues([[
+      "Tanggal",
+      "Perusahaan",
+      "Posisi",
+      "Status",
+      "URL"
+    ]]);
 
-  // ---------------------------------------------------
-  // Table Headers
-  // ---------------------------------------------------
-
-  sheet.getRange("A1:E1").setValues([[
-    "Date",
-    "Company",
-    "Position",
-    "Status",
-    "URL"
-  ]]);
-
-
-  // ---------------------------------------------------
-  // Status Dropdown
-  // ---------------------------------------------------
-
+  // Status dropdown
   const rule =
     SpreadsheetApp
       .newDataValidation()
@@ -50,25 +31,16 @@ function setupSheet() {
       .setAllowInvalid(false)
       .build();
 
-
   sheet
     .getRange("D2:D")
     .setDataValidation(rule);
 
-
-  // ---------------------------------------------------
-  // Header Formatting
-  // ---------------------------------------------------
-
+  // Header formatting
   sheet
     .getRange("A1:E1")
     .setFontWeight("bold");
 
-
-  // ---------------------------------------------------
-  // Column Widths
-  // ---------------------------------------------------
-
+  // Column widths
   sheet.setColumnWidths(
     1,
     5,
@@ -77,86 +49,38 @@ function setupSheet() {
 }
 
 
-
-/**
- * Handles POST requests sent to the Google Apps Script Web App.
- *
- * The endpoint expects a "payload" parameter containing
- * a JSON object with the following properties:
- *
- * {
- *   company: "Company Name",
- *   position: "Job Position",
- *   url: "Job URL"
- * }
- *
- * The received application data is appended to the
- * "Applications" sheet with the default status "Applied".
- *
- * @param {Object} e - Google Apps Script HTTP POST event object.
- * @returns {TextOutput} JSON response indicating success or failure.
- */
 function doPost(e) {
+
+  const lock =
+    LockService.getScriptLock();
 
   try {
 
     console.log(
-      "===== doPost called ====="
+      "===== doPost dipanggil ====="
     );
 
-
-    // -------------------------------------------------
-    // Validate Event Object
-    // -------------------------------------------------
 
     if (!e) {
 
       throw new Error(
-        "Event object is not available. " +
-        "Do not run doPost() manually."
+        "Event e tidak tersedia."
       );
+
     }
 
 
-    console.log(
-      "Request parameters:",
-      e.parameter
-    );
-
-
-    // -------------------------------------------------
-    // Get Applications Sheet
-    // -------------------------------------------------
-
-    const sheet =
-      SpreadsheetApp
-        .getActiveSpreadsheet()
-        .getSheetByName("Applications");
-
-
-    if (!sheet) {
+    if (
+      !e.parameter ||
+      !e.parameter.payload
+    ) {
 
       throw new Error(
-        'Sheet "Applications" was not found.'
+        "Parameter payload tidak ditemukan."
       );
+
     }
 
-
-    // -------------------------------------------------
-    // Validate Payload
-    // -------------------------------------------------
-
-    if (!e.parameter.payload) {
-
-      throw new Error(
-        "Payload parameter was not provided."
-      );
-    }
-
-
-    // -------------------------------------------------
-    // Parse JSON Payload
-    // -------------------------------------------------
 
     const data =
       JSON.parse(
@@ -165,38 +89,76 @@ function doPost(e) {
 
 
     console.log(
-      "Received application data:",
+      "Data diterima:",
       data
     );
 
 
-    // -------------------------------------------------
-    // Save Application
-    // -------------------------------------------------
+    const sheet =
+      SpreadsheetApp
+        .getActiveSpreadsheet()
+        .getSheetByName(
+          "Applications"
+        );
+
+
+    if (!sheet) {
+
+      throw new Error(
+        "Sheet 'Applications' tidak ditemukan."
+      );
+
+    }
+
+
+    // ============================================
+    // LOCK
+    // ============================================
+
+    lock.waitLock(
+      10000
+    );
+
+
+    // ============================================
+    // APPEND
+    // ============================================
 
     sheet.appendRow([
+
       new Date(),
+
       data.company || "",
+
       data.position || "",
+
       "Applied",
+
       data.url || ""
+
     ]);
 
 
-    // -------------------------------------------------
-    // Success Response
-    // -------------------------------------------------
+    SpreadsheetApp.flush();
+
+
+    console.log(
+      "✅ Data berhasil masuk ke Sheet."
+    );
+
 
     return ContentService
       .createTextOutput(
         JSON.stringify({
 
-          success: true,
+          success:
+            true,
 
           message:
-            "Application data saved successfully.",
+            "Data berhasil masuk",
 
-          data: data
+          data:
+            data
 
         })
       )
@@ -207,26 +169,18 @@ function doPost(e) {
 
   } catch (error) {
 
-
-    // -------------------------------------------------
-    // Error Logging
-    // -------------------------------------------------
-
     console.error(
-      "ERROR:",
+      "❌ ERROR:",
       error.message
     );
 
-
-    // -------------------------------------------------
-    // Error Response
-    // -------------------------------------------------
 
     return ContentService
       .createTextOutput(
         JSON.stringify({
 
-          success: false,
+          success:
+            false,
 
           error:
             error.message
@@ -236,5 +190,20 @@ function doPost(e) {
       .setMimeType(
         ContentService.MimeType.JSON
       );
+
+
+  } finally {
+
+    try {
+
+      lock.releaseLock();
+
+    } catch (error) {
+
+      // Ignore lock release error.
+
+    }
+
   }
+
 }
