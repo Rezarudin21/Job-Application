@@ -1,5 +1,6 @@
-# Job-ApplicationV1
+# Job-Application
 Chrome extension that automatically tracks JobStreet job applications and saves company, position, job ID, application status, and job URL to Google Sheets.
+This Extensions are still limited in Jobstreet (Indonesia)
 
 ## Installation & Setup
 
