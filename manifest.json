@@ -1,35 +1,19 @@
 {
   "manifest_version": 3,
-
   "name": "Job Application Tracker",
-
-  "version": "2.1.0",
-
+  "version": "3.0.0",
   "description": "Automatically tracks JobStreet job applications and saves them to Google Sheets.",
-
-  "permissions": [
-    "storage"
-  ],
-
-  "host_permissions": [
-    "https://id.jobstreet.com/*",
-    "https://script.google.com/*",
-    "https://script.googleusercontent.com/*"
-  ],
-
-  "content_scripts": [
-    {
-      "matches": [
-        "https://id.jobstreet.com/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
-
+  "permissions": ["storage", "tabs"],
+  "host_permissions": ["https://id.jobstreet.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],
   "background": {
     "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": ["https://id.jobstreet.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "action": {
+    "default_title": "Job Application Tracker"
   }
 }
