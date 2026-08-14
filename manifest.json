@@ -8,6 +8,7 @@
   "background": {
     "service_worker": "background.js"
   },
+  
   "content_scripts": [{
     "matches": ["https://id.jobstreet.com/*", "https://glints.com/*", "https://www.glints.com/*"],
     "js": ["content.js"],
@@ -16,4 +17,5 @@
   "action": {
     "default_title": "Job Application Tracker"
   }
+
 }

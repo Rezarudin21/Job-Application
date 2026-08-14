@@ -1,82 +1,1069 @@
-function setupSheet() {
+// =====================================================
+// JOB APPLICATION TRACKER - GOOGLE APPS SCRIPT
+// =====================================================
+
+const SHEET_NAME = 'Applications';
+
+
+// =====================================================
+// CONSTANTS
+// =====================================================
+
+const ALLOWED_STATUSES = [
+  'Applied',
+  'HR Contacted',
+  'Test',
+  'Interview',
+  'Offer',
+  'Rejected',
+  'Withdrawn'
+];
+
+
+// =====================================================
+// GET SHEET
+// =====================================================
+
+function getApplicationSheet() {
+
   const sheet =
     SpreadsheetApp
       .getActiveSpreadsheet()
-      .getSheetByName("Applications");
+      .getSheetByName(SHEET_NAME);
 
-  // Header
-  sheet
-    .getRange("A1:E1")
-    .setValues([[
-      "Tanggal",
-      "Perusahaan",
-      "Posisi",
-      "Status",
-      "URL"
-    ]]);
+  if (!sheet) {
 
-  // Status dropdown
-  const rule =
-    SpreadsheetApp
-      .newDataValidation()
-      .requireValueInList(
-        [
-          "Applied",
-          "Interview",
-          "Rejected",
-          "Offer"
-        ],
-        true
-      )
-      .setAllowInvalid(false)
-      .build();
+    throw new Error(
+      'Sheet Applications tidak ditemukan'
+    );
 
-  sheet
-    .getRange("D2:D")
-    .setDataValidation(rule);
+  }
 
-  // Header formatting
-  sheet
-    .getRange("A1:E1")
-    .setFontWeight("bold");
+  return sheet;
 
-  // Column widths
-  sheet.setColumnWidths(
-    1,
-    5,
-    220
-  );
 }
 
 
-function doPost(e) {
+// =====================================================
+// GET APPLICATIONS
+// =====================================================
 
-  const lock =
-    LockService.getScriptLock();
+function getApplications() {
+
+  const sheet = getApplicationSheet();
+
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow < 2) {
+    return [];
+  }
+
+  const values =
+    sheet
+      .getRange(
+        2,
+        1,
+        lastRow - 1,
+        10
+      )
+      .getValues();
+
+
+  return values.map((row, index) => {
+
+    return {
+
+      row: index + 2,
+
+      id: row[0],
+
+      date:
+        formatDate(row[1]),
+
+      company:
+        row[2] || '',
+
+      position:
+        row[3] || '',
+
+      status:
+        row[4] || 'Applied',
+
+      url:
+        row[5] || '',
+
+      jobId:
+        row[6] || '',
+
+      platform:
+        row[7] || 'Unknown',
+
+      lastUpdate:
+        formatDate(row[8]),
+
+      reminderDate:
+        formatDate(row[9])
+
+    };
+
+  });
+
+}
+
+
+// =====================================================
+// DATE FORMAT
+// =====================================================
+
+function formatDate(value) {
+
+  if (!value) {
+    return '';
+  }
+
+  if (
+    Object.prototype.toString.call(value)
+    !== '[object Date]'
+  ) {
+
+    return String(value);
+
+  }
+
+  return Utilities.formatDate(
+    value,
+    Session.getScriptTimeZone(),
+    'yyyy-MM-dd HH:mm:ss'
+  );
+
+}
+
+
+// =====================================================
+// MAIN GET API
+// =====================================================
+
+function doGet(e) {
 
   try {
 
-    console.log(
-      "===== doPost dipanggil ====="
-    );
+    const action =
+      e &&
+      e.parameter &&
+      e.parameter.action
+        ? e.parameter.action
+        : 'dashboard';
 
 
-    if (!e) {
+    // =================================================
+    // DASHBOARD
+    // =================================================
 
-      throw new Error(
-        "Event e tidak tersedia."
-      );
+    if (action === 'dashboard') {
+
+      const applications =
+        getApplications();
+
+      return jsonResponse({
+
+        success: true,
+
+        data: {
+
+          applications:
+            applications,
+
+          stats:
+            calculateStats(applications),
+
+          reminders:
+            getReminders(applications)
+
+        }
+
+      });
 
     }
 
 
+    // =================================================
+    // APPLICATIONS
+    // =================================================
+
+    if (action === 'applications') {
+
+      return jsonResponse({
+
+        success: true,
+
+        data: getApplications()
+
+      });
+
+    }
+
+
+    // =================================================
+    // ANALYTICS
+    // =================================================
+
+    if (action === 'analytics') {
+
+      const applications =
+        getApplications();
+
+      return jsonResponse({
+
+        success: true,
+
+        data:
+          calculateAnalytics(
+            applications
+          )
+
+      });
+
+    }
+
+
+    // =================================================
+    // REMINDERS
+    // =================================================
+
+    if (action === 'reminders') {
+
+      const applications =
+        getApplications();
+
+      return jsonResponse({
+
+        success: true,
+
+        data:
+          calculateReminderData(
+            applications
+          )
+
+      });
+
+    }
+
+
+    // =================================================
+    // UNKNOWN ACTION
+    // =================================================
+
+    return jsonResponse({
+
+      success: false,
+
+      error:
+        'Action tidak dikenal: ' +
+        action
+
+    });
+
+
+  } catch (error) {
+
+    return jsonResponse({
+
+      success: false,
+
+      error:
+        error.message
+
+    });
+
+  }
+
+}
+
+
+// =====================================================
+// CALCULATE STATISTICS
+// =====================================================
+
+function calculateStats(applications) {
+
+  const counts = {};
+
+  ALLOWED_STATUSES.forEach(
+    status => {
+      counts[status] = 0;
+    }
+  );
+
+
+  applications.forEach(
+    application => {
+
+      if (
+        counts[
+          application.status
+        ] !== undefined
+      ) {
+
+        counts[
+          application.status
+        ]++;
+
+      }
+
+    }
+  );
+
+
+  return {
+
+    total:
+      applications.length,
+
+    applied:
+      counts['Applied'],
+
+    contacted:
+      counts['HR Contacted'],
+
+    test:
+      counts['Test'],
+
+    interview:
+      counts['Interview'],
+
+    offer:
+      counts['Offer'],
+
+    rejected:
+      counts['Rejected'],
+
+    withdrawn:
+      counts['Withdrawn']
+
+  };
+
+}
+
+
+// =====================================================
+// REMINDERS
+// =====================================================
+
+function getReminders(applications) {
+
+  const now =
+    new Date();
+
+  return applications
+
+    .filter(application => {
+
+      if (
+        !application.reminderDate
+      ) {
+
+        return false;
+
+      }
+
+      if (
+        application.status ===
+        'Rejected'
+      ) {
+
+        return false;
+
+      }
+
+      if (
+        application.status ===
+        'Withdrawn'
+      ) {
+
+        return false;
+
+      }
+
+      const reminder =
+        parseDate(
+          application.reminderDate
+        );
+
+      if (!reminder) {
+        return false;
+      }
+
+      return reminder <= now;
+
+    })
+
+    .sort((a, b) => {
+
+      return (
+        parseDate(a.reminderDate) -
+        parseDate(b.reminderDate)
+      );
+
+    });
+
+}
+
+
+// =====================================================
+// REMINDER DATA
+// =====================================================
+
+function calculateReminderData(applications) {
+
+  const now =
+    new Date();
+
+  const endDate =
+    new Date(now);
+
+  endDate.setDate(
+    endDate.getDate() + 7
+  );
+
+
+  const overdue = [];
+
+  const today = [];
+
+  const upcoming = [];
+
+
+  applications.forEach(
+    application => {
+
+      if (
+        !application.reminderDate
+      ) {
+        return;
+      }
+
+
+      if (
+        application.status ===
+        'Rejected'
+      ) {
+        return;
+      }
+
+
+      if (
+        application.status ===
+        'Withdrawn'
+      ) {
+        return;
+      }
+
+
+      const reminder =
+        parseDate(
+          application.reminderDate
+        );
+
+
+      if (!reminder) {
+        return;
+      }
+
+
+      // OVERDUE
+
+      if (reminder < now) {
+
+        overdue.push(
+          createReminderItem(
+            application,
+            reminder,
+            'overdue'
+          )
+        );
+
+        return;
+
+      }
+
+
+      // TODAY
+
+      if (
+        isSameDay(
+          reminder,
+          now
+        )
+      ) {
+
+        today.push(
+          createReminderItem(
+            application,
+            reminder,
+            'today'
+          )
+        );
+
+        return;
+
+      }
+
+
+      // UPCOMING
+
+      if (
+        reminder <= endDate
+      ) {
+
+        upcoming.push(
+          createReminderItem(
+            application,
+            reminder,
+            'upcoming'
+          )
+        );
+
+      }
+
+    }
+  );
+
+
+  return {
+
+    total:
+      overdue.length +
+      today.length +
+      upcoming.length,
+
+    overdue:
+      overdue,
+
+    today:
+      today,
+
+    upcoming:
+      upcoming
+
+  };
+
+}
+
+
+// =====================================================
+// CREATE REMINDER ITEM
+// =====================================================
+
+function createReminderItem(
+  application,
+  reminder,
+  type
+) {
+
+  const now =
+    new Date();
+
+  const diff =
+    Math.ceil(
+      (
+        reminder.getTime() -
+        now.getTime()
+      ) /
+      (
+        1000 *
+        60 *
+        60 *
+        24
+      )
+    );
+
+
+  let message = '';
+
+
+  if (type === 'overdue') {
+
+    message =
+      Math.abs(diff) +
+      ' day(s) overdue';
+
+  }
+
+
+  if (type === 'today') {
+
+    message =
+      'Due today';
+
+  }
+
+
+  if (type === 'upcoming') {
+
+    message =
+      'In ' +
+      diff +
+      ' day(s)';
+
+  }
+
+
+  return {
+
+    id:
+      application.id,
+
+    company:
+      application.company,
+
+    position:
+      application.position,
+
+    status:
+      application.status,
+
+    platform:
+      application.platform,
+
+    url:
+      application.url,
+
+    reminderDate:
+      application.reminderDate,
+
+    lastUpdate:
+      application.lastUpdate,
+
+    type:
+      type,
+
+    message:
+      message
+
+  };
+
+}
+
+
+// =====================================================
+// ANALYTICS
+// =====================================================
+
+function calculateAnalytics(applications) {
+
+  const total =
+    applications.length;
+
+
+  // =================================================
+  // STATUS
+  // =================================================
+
+  const statusCounts = {};
+
+  ALLOWED_STATUSES.forEach(
+    status => {
+
+      statusCounts[status] = 0;
+
+    }
+  );
+
+
+  applications.forEach(
+    application => {
+
+      if (
+        statusCounts[
+          application.status
+        ] !== undefined
+      ) {
+
+        statusCounts[
+          application.status
+        ]++;
+
+      }
+
+    }
+  );
+
+
+  // =================================================
+  // ACTIVE
+  // =================================================
+
+  const active =
+    applications.filter(
+      application =>
+        application.status !== 'Rejected' &&
+        application.status !== 'Withdrawn'
+    ).length;
+
+
+  // =================================================
+  // RESPONSES
+  // =================================================
+
+  const contacted =
+    statusCounts['HR Contacted'] +
+    statusCounts['Test'] +
+    statusCounts['Interview'] +
+    statusCounts['Offer'];
+
+
+  const interviews =
+    statusCounts['Interview'] +
+    statusCounts['Offer'];
+
+
+  const offers =
+    statusCounts['Offer'];
+
+
+  const rejected =
+    statusCounts['Rejected'];
+
+
+  // =================================================
+  // RATES
+  // =================================================
+
+  const responseRate =
+    total > 0
+      ? roundPercentage(
+          contacted / total * 100
+        )
+      : 0;
+
+
+  const interviewRate =
+    total > 0
+      ? roundPercentage(
+          interviews / total * 100
+        )
+      : 0;
+
+
+  const offerRate =
+    total > 0
+      ? roundPercentage(
+          offers / total * 100
+        )
+      : 0;
+
+
+  const rejectionRate =
+    total > 0
+      ? roundPercentage(
+          rejected / total * 100
+        )
+      : 0;
+
+
+  // =================================================
+  // PLATFORM
+  // =================================================
+
+  const platformCounts = {};
+
+
+  applications.forEach(
+    application => {
+
+      const platform =
+        application.platform ||
+        'Unknown';
+
+
+      if (
+        !platformCounts[
+          platform
+        ]
+      ) {
+
+        platformCounts[
+          platform
+        ] = 0;
+
+      }
+
+
+      platformCounts[
+        platform
+      ]++;
+
+    }
+  );
+
+
+  // =================================================
+  // MONTHLY
+  // =================================================
+
+  const monthly =
+    calculateMonthlyApplications(
+      applications
+    );
+
+
+  return {
+
+    total:
+      total,
+
+    active:
+      active,
+
+    contacted:
+      contacted,
+
+    interviews:
+      interviews,
+
+    offers:
+      offers,
+
+    rejected:
+      rejected,
+
+    responseRate:
+      responseRate,
+
+    interviewRate:
+      interviewRate,
+
+    offerRate:
+      offerRate,
+
+    rejectionRate:
+      rejectionRate,
+
+    statusCounts:
+      statusCounts,
+
+    platformCounts:
+      platformCounts,
+
+    monthly:
+      monthly
+
+  };
+
+}
+
+
+// =====================================================
+// MONTHLY APPLICATIONS
+// =====================================================
+
+function calculateMonthlyApplications(
+  applications
+) {
+
+  const result = {};
+
+
+  applications.forEach(
+    application => {
+
+      if (!application.date) {
+        return;
+      }
+
+
+      const date =
+        parseDate(
+          application.date
+        );
+
+
+      if (!date) {
+        return;
+      }
+
+
+      const key =
+        Utilities.formatDate(
+          date,
+          Session.getScriptTimeZone(),
+          'yyyy-MM'
+        );
+
+
+      if (!result[key]) {
+
+        result[key] = 0;
+
+      }
+
+
+      result[key]++;
+
+    }
+  );
+
+
+  return result;
+
+}
+
+
+// =====================================================
+// UPDATE APPLICATION STATUS
+// =====================================================
+
+function updateApplicationStatus(
+  id,
+  status
+) {
+
+  const sheet =
+    getApplicationSheet();
+
+
+  if (
+    !ALLOWED_STATUSES.includes(
+      status
+    )
+  ) {
+
+    throw new Error(
+      'Status tidak valid'
+    );
+
+  }
+
+
+  const lastRow =
+    sheet.getLastRow();
+
+
+  if (lastRow < 2) {
+
+    throw new Error(
+      'Tidak ada application'
+    );
+
+  }
+
+
+  const ids =
+    sheet
+      .getRange(
+        2,
+        1,
+        lastRow - 1,
+        1
+      )
+      .getValues();
+
+
+  for (
+    let i = 0;
+    i < ids.length;
+    i++
+  ) {
+
     if (
+      String(ids[i][0]) ===
+      String(id)
+    ) {
+
+      const row =
+        i + 2;
+
+
+      // STATUS
+
+      sheet
+        .getRange(
+          row,
+          5
+        )
+        .setValue(
+          status
+        );
+
+
+      // LAST UPDATE
+
+      const now =
+        new Date();
+
+      sheet
+        .getRange(
+          row,
+          9
+        )
+        .setValue(
+          now
+        );
+
+
+      // REMINDER +7 DAYS
+
+      const reminder =
+        new Date(now);
+
+      reminder.setDate(
+        reminder.getDate() + 7
+      );
+
+
+      sheet
+        .getRange(
+          row,
+          10
+        )
+        .setValue(
+          reminder
+        );
+
+
+      return {
+
+        success: true,
+
+        message:
+          'Status berhasil diperbarui',
+
+        id:
+          id,
+
+        status:
+          status
+
+      };
+
+    }
+
+  }
+
+
+  throw new Error(
+    'Application ID tidak ditemukan'
+  );
+
+}
+
+
+// =====================================================
+// POST API
+// =====================================================
+
+function doPost(e) {
+
+  try {
+
+    if (
+      !e ||
       !e.parameter ||
       !e.parameter.payload
     ) {
 
       throw new Error(
-        "Parameter payload tidak ditemukan."
+        'Payload tidak ditemukan'
       );
 
     }
@@ -88,122 +1075,288 @@ function doPost(e) {
       );
 
 
-    console.log(
-      "Data diterima:",
+    // =================================================
+    // UPDATE STATUS
+    // =================================================
+
+    if (
+      data.action ===
+      'updateStatus'
+    ) {
+
+      const result =
+        updateApplicationStatus(
+          data.id,
+          data.status
+        );
+
+
+      return jsonResponse(
+        result
+      );
+
+    }
+
+
+    // =================================================
+    // SAVE APPLICATION
+    // =================================================
+
+    return saveApplication(
       data
     );
 
 
-    const sheet =
-      SpreadsheetApp
-        .getActiveSpreadsheet()
-        .getSheetByName(
-          "Applications"
-        );
-
-
-    if (!sheet) {
-
-      throw new Error(
-        "Sheet 'Applications' tidak ditemukan."
-      );
-
-    }
-
-
-    // ============================================
-    // LOCK
-    // ============================================
-
-    lock.waitLock(
-      10000
-    );
-
-
-    // ============================================
-    // APPEND
-    // ============================================
-
-    sheet.appendRow([
-
-      new Date(),
-
-      data.company || "",
-
-      data.position || "",
-
-      "Applied",
-
-      data.url || ""
-
-    ]);
-
-
-    SpreadsheetApp.flush();
-
-
-    console.log(
-      "✅ Data berhasil masuk ke Sheet."
-    );
-
-
-    return ContentService
-      .createTextOutput(
-        JSON.stringify({
-
-          success:
-            true,
-
-          message:
-            "Data berhasil masuk",
-
-          data:
-            data
-
-        })
-      )
-      .setMimeType(
-        ContentService.MimeType.JSON
-      );
-
-
   } catch (error) {
 
-    console.error(
-      "❌ ERROR:",
-      error.message
+    return jsonResponse({
+
+      success: false,
+
+      error:
+        error.message
+
+    });
+
+  }
+
+}
+
+
+// =====================================================
+// SAVE APPLICATION
+// =====================================================
+
+function saveApplication(data) {
+
+  const sheet =
+    getApplicationSheet();
+
+
+  const now =
+    new Date();
+
+
+  // =================================================
+  // DETECT PLATFORM
+  // =================================================
+
+  let platform =
+    'Unknown';
+
+
+  const url =
+    data.url || '';
+
+
+  const lowerUrl =
+    url.toLowerCase();
+
+
+  if (
+    lowerUrl.includes(
+      'jobstreet.com'
+    )
+  ) {
+
+    platform =
+      'JobStreet';
+
+  } else if (
+    lowerUrl.includes(
+      'glints.com'
+    )
+  ) {
+
+    platform =
+      'Glints';
+
+  }
+
+
+  // =================================================
+  // GENERATE ID
+  // =================================================
+
+  const nextRow =
+    sheet.getLastRow() + 1;
+
+
+  const id =
+
+    'APP-' +
+
+    Utilities.formatDate(
+      now,
+      Session.getScriptTimeZone(),
+      'yyyyMMdd'
+    ) +
+
+    '-' +
+
+    ('000' + nextRow)
+      .slice(-3);
+
+
+  // =================================================
+  // REMINDER
+  // =================================================
+
+  const reminderDate =
+    new Date(now);
+
+
+  reminderDate.setDate(
+    reminderDate.getDate() + 7
+  );
+
+
+  // =================================================
+  // SAVE
+  // =================================================
+
+  sheet.appendRow([
+
+    id,
+
+    now,
+
+    data.company || '',
+
+    data.position || '',
+
+    'Applied',
+
+    data.url || '',
+
+    data.jobId || '',
+
+    platform,
+
+    now,
+
+    reminderDate
+
+  ]);
+
+
+  return jsonResponse({
+
+    success: true,
+
+    message:
+      'Application berhasil disimpan',
+
+    id:
+      id
+
+  });
+
+}
+
+
+// =====================================================
+// DATE PARSER
+// =====================================================
+
+function parseDate(value) {
+
+  if (!value) {
+    return null;
+  }
+
+
+  if (
+    Object.prototype.toString.call(value)
+    === '[object Date]'
+  ) {
+
+    return value;
+
+  }
+
+
+  const date =
+    new Date(
+      String(value)
+        .replace(' ', 'T')
     );
 
 
-    return ContentService
-      .createTextOutput(
-        JSON.stringify({
+  if (
+    isNaN(
+      date.getTime()
+    )
+  ) {
 
-          success:
-            false,
-
-          error:
-            error.message
-
-        })
-      )
-      .setMimeType(
-        ContentService.MimeType.JSON
-      );
-
-
-  } finally {
-
-    try {
-
-      lock.releaseLock();
-
-    } catch (error) {
-
-      // Ignore lock release error.
-
-    }
+    return null;
 
   }
+
+
+  return date;
+
+}
+
+
+// =====================================================
+// SAME DAY
+// =====================================================
+
+function isSameDay(
+  date1,
+  date2
+) {
+
+  return (
+
+    date1.getFullYear() ===
+    date2.getFullYear()
+
+    &&
+
+    date1.getMonth() ===
+    date2.getMonth()
+
+    &&
+
+    date1.getDate() ===
+    date2.getDate()
+
+  );
+
+}
+
+
+// =====================================================
+// ROUND PERCENTAGE
+// =====================================================
+
+function roundPercentage(
+  value
+) {
+
+  return Math.round(
+    value * 10
+  ) / 10;
+
+}
+
+
+// =====================================================
+// JSON RESPONSE
+// =====================================================
+
+function jsonResponse(data) {
+
+  return ContentService
+
+    .createTextOutput(
+      JSON.stringify(data)
+    )
+
+    .setMimeType(
+      ContentService.MimeType.JSON
+    );
 
 }

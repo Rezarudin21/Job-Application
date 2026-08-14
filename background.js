@@ -13,7 +13,7 @@ console.log(
 // =====================================================
 
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbzE9LJ3UsQPN-hOFqEUt37rzyXCy6jjYR8GlUHXXtMhtAZeN8rmLnywKxNdEaxZZn62/exec";
+  "https://script.google.com/macros/s/AKfycbwqulmiFHDukLukoxPnjXpTPWN5dgFWZDe9V3f5d2oz0hDRGP_MTzzaHs3EWxmt7Lpk/exec";
 
 
 // =====================================================
@@ -387,3 +387,17 @@ function sleep(
   );
 
 }
+
+// =====================================================
+// OPEN DASHBOARD WHEN CHROME STARTS
+// =====================================================
+
+chrome.runtime.onStartup.addListener(() => {
+  const dashboardUrl = chrome.runtime.getURL("dashboard.html");
+
+  chrome.tabs.create({
+    url: dashboardUrl
+  });
+
+  console.log("🚀 Job Application Dashboard dibuka");
+});
