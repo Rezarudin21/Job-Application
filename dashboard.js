@@ -3,7 +3,7 @@
 // =====================================================
 
 const API_URL =
-    "https://script.google.com/macros/s/AKfycbwqulmiFHDukLukoxPnjXpTPWN5dgFWZDe9V3f5d2oz0hDRGP_MTzzaHs3EWxmt7Lpk/exec";
+    "YOUR_WEB_APPS";
 
 const REFRESH_INTERVAL = 30 * 1000;
 
