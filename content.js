@@ -1,8 +1,26 @@
 // =====================================================
 // JOB APPLICATION TRACKER - FINAL VERSION
+// SUPPORT: JOBSTREET + GLINTS
 // =====================================================
 
-console.log("🚀 JobStreet Apply Tracker aktif");
+console.log("🚀 Job Application Tracker aktif");
+
+// =====================================================
+// PLATFORM DETECTION
+// =====================================================
+
+const HOST = location.hostname;
+
+const IS_JOBSTREET =
+  HOST.includes("jobstreet.com");
+
+const IS_GLINTS =
+  HOST.includes("glints.com");
+
+console.log(
+  "🌐 Platform:",
+  HOST
+);
 
 // =====================================================
 // EXTENSION CONTEXT CHECK
@@ -73,6 +91,7 @@ function extractJobIdFromUrl(url) {
 
   if (!url) return "";
 
+  // JobStreet
   let match = url.match(
     /\/(?:id\/)?job\/(\d+)/i
   );
@@ -93,7 +112,7 @@ function extractJobIdFromUrl(url) {
 }
 
 // =====================================================
-// FIND JOB CARD
+// FIND JOB CARD (JOBSTREET)
 // =====================================================
 
 function findJobCard(element) {
@@ -125,7 +144,7 @@ function findJobCard(element) {
 }
 
 // =====================================================
-// POSITION
+// POSITION - JOBSTREET
 // =====================================================
 
 function getPositionFromCard(card) {
@@ -136,7 +155,7 @@ function getPositionFromCard(card) {
     card.querySelector('[data-automation="job-detail-title"]') ||
     card.querySelector('[data-automation="job-title"]') ||
     card.querySelector('[data-automation="job-listing-title"]') ||
-    card.querySelector('h1');
+    card.querySelector("h1");
 
   if (!title) return "";
 
@@ -168,7 +187,7 @@ function getPositionFromPage() {
 
     'h1[data-automation="job-detail-title-heading"]',
 
-    'h1'
+    "h1"
 
   ];
 
@@ -191,7 +210,7 @@ function getPositionFromPage() {
 }
 
 // =====================================================
-// COMPANY
+// COMPANY - JOBSTREET
 // =====================================================
 
 function getCompanyFromCard(card) {
@@ -219,10 +238,116 @@ function getCompanyFromPage() {
 }
 
 // =====================================================
+// GLINTS SUPPORT
+// =====================================================
+
+function getGlintsJobId() {
+
+  const path = location.pathname;
+
+  // /id/opportunities/jobs/programmer/86a382d0-xxxx
+
+  const match =
+    path.match(
+      /\/jobs\/[^/]+\/([a-f0-9-]+)/i
+    );
+
+  return match ? match[1] : "";
+}
+
+function getGlintsPosition() {
+
+  const selectors = [
+    "h1",
+    '[data-testid="job-title"]'
+  ];
+
+  for (const selector of selectors) {
+
+    const el =
+      document.querySelector(selector);
+
+    if (
+      el &&
+      el.innerText &&
+      el.innerText.trim()
+    ) {
+      return el.innerText.trim();
+    }
+  }
+
+  return "";
+}
+
+function getGlintsCompany() {
+
+  const selectors = [
+    'a[href*="/companies/"]',
+    '[data-testid="company-name"]'
+  ];
+
+  for (const selector of selectors) {
+
+    const el =
+      document.querySelector(selector);
+
+    if (
+      el &&
+      el.innerText &&
+      el.innerText.trim()
+    ) {
+      return el.innerText.trim();
+    }
+  }
+
+  return "";
+}
+
+function getGlintsJobInfo() {
+
+  return {
+
+    jobId:
+      getGlintsJobId(),
+
+    company:
+      getGlintsCompany(),
+
+    position:
+      getGlintsPosition(),
+
+    url:
+      location.href.split("?")[0]
+
+  };
+}
+
+// =====================================================
 // GET JOB INFO
 // =====================================================
 
 function getJobInfo(clickedElement) {
+
+  // ===================================================
+  // GLINTS
+  // ===================================================
+
+  if (IS_GLINTS) {
+
+    const result =
+      getGlintsJobInfo();
+
+    console.log(
+      "🟦 GLINTS DATA:",
+      result
+    );
+
+    return result;
+  }
+
+  // ===================================================
+  // JOBSTREET
+  // ===================================================
 
   const card = findJobCard(clickedElement);
 
@@ -241,7 +366,6 @@ function getJobInfo(clickedElement) {
     }
   }
 
-  // Fallback ke URL halaman saat ini
   if (!jobId) {
     jobId =
       extractJobIdFromUrl(location.href);
@@ -263,9 +387,9 @@ function getJobInfo(clickedElement) {
       getCompanyFromPage();
   }
 
-  const url = jobId ?
-    `https://id.jobstreet.com/id/job/${jobId}` :
-    location.href;
+  const url = jobId
+    ? `https://id.jobstreet.com/id/job/${jobId}`
+    : location.href;
 
   const result = {
     jobId,
@@ -299,14 +423,24 @@ function isApplyButton(element) {
     .trim()
     .toLowerCase();
 
-  return [
+  const words = [
+
+    // JobStreet
     "lamaran cepat",
     "lamar cepat",
     "quick apply",
+
+    // Umum
     "apply",
     "lamar",
-    "submit"
-  ].some(v =>
+
+    // Glints
+    "apply now",
+    "submit application"
+
+  ];
+
+  return words.some(v =>
     text === v || text.includes(v)
   );
 }
@@ -339,11 +473,10 @@ function findClickableElement(target) {
 // DUPLICATE PROTECTION
 // =====================================================
 
-// Mencegah double click cepat
 let lastApplicationKey = "";
 let lastApplicationTime = 0;
 
-// Mencegah Quick Apply + Submit form tercatat dua kali
+// Quick Apply + Submit protection
 const appliedJobs = new Set();
 
 // =====================================================
@@ -353,21 +486,45 @@ const appliedJobs = new Set();
 async function handleApplyClick(element) {
 
   console.log("🟢 APPLY TERDETEKSI");
+
   // ===================================================
-  // HANYA CATAT DARI HALAMAN DETAIL LOWONGAN
+  // JOBSTREET: hanya halaman detail lowongan
   // ===================================================
 
-  const isJobDetailPage = !!document.querySelector(
-    '[data-automation="job-detail-title"]'
-  );
+  if (IS_JOBSTREET) {
 
-  if (!isJobDetailPage) {
+    const isJobDetailPage =
+      !!document.querySelector(
+        '[data-automation="job-detail-title"]'
+      );
 
-    console.log(
-      "⛔ Klik di halaman formulir aplikasi diabaikan"
-    );
+    if (!isJobDetailPage) {
 
-    return;
+      console.log(
+        "⛔ JobStreet form page diabaikan"
+      );
+
+      return;
+    }
+  }
+
+  // ===================================================
+  // GLINTS: hanya halaman detail lowongan
+  // ===================================================
+
+  if (IS_GLINTS) {
+
+    const isGlintsDetail =
+      location.pathname.includes("/jobs/");
+
+    if (!isGlintsDetail) {
+
+      console.log(
+        "⛔ Glints form page diabaikan"
+      );
+
+      return;
+    }
   }
 
   const data = getJobInfo(element);
@@ -385,24 +542,18 @@ async function handleApplyClick(element) {
   const applicationKey =
     data.url || data.jobId;
 
-  // -----------------------------------------------
-  // Sudah pernah disimpan di tab ini
-  // -----------------------------------------------
-
+  // Sudah pernah disimpan
   if (appliedJobs.has(applicationKey)) {
 
     console.log(
-      "⏭️ Job sudah pernah dicatat, submit kedua diabaikan:",
+      "⏭️ Job sudah pernah dicatat:",
       applicationKey
     );
 
     return;
   }
 
-  // -----------------------------------------------
   // Double click protection
-  // -----------------------------------------------
-
   const now = Date.now();
 
   if (
@@ -421,12 +572,7 @@ async function handleApplyClick(element) {
   lastApplicationKey = applicationKey;
   lastApplicationTime = now;
 
-  // Tandai sudah tercatat
   appliedJobs.add(applicationKey);
-
-  // -----------------------------------------------
-  // Kirim ke background
-  // -----------------------------------------------
 
   const response =
     await sendMessageSafely({
@@ -506,9 +652,8 @@ if (
 
   document.addEventListener(
     "DOMContentLoaded",
-    initializeTracker, {
-      once: true
-    }
+    initializeTracker,
+    { once: true }
   );
 
 } else {
@@ -546,8 +691,9 @@ let currentTrackedJobId =
 
 setInterval(() => {
 
-  const newJobId =
-    extractJobIdFromUrl(location.href);
+  const newJobId = IS_GLINTS
+    ? getGlintsJobId()
+    : extractJobIdFromUrl(location.href);
 
   if (
     newJobId &&

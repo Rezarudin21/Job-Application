@@ -13,7 +13,7 @@ console.log(
 // =====================================================
 
 const GOOGLE_SCRIPT_URL =
-  "YOUR_WEB_APPS";
+  "https://script.google.com/macros/s/AKfycbzE9LJ3UsQPN-hOFqEUt37rzyXCy6jjYR8GlUHXXtMhtAZeN8rmLnywKxNdEaxZZn62/exec";
 
 
 // =====================================================

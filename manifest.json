@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Job Application Tracker",
-  "version": "3.0.0",
-  "description": "Automatically tracks JobStreet job applications and saves them to Google Sheets.",
+  "version": "3.1.0",
+  "description": "Automatically tracks JobStreet and Glints job applications and saves them to Google Sheets.",
   "permissions": ["storage", "tabs"],
-  "host_permissions": ["https://id.jobstreet.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],
+  "host_permissions": ["https://id.jobstreet.com/*", "https://glints.com/*", "https://www.glints.com/*", "https://script.google.com/*", "https://script.googleusercontent.com/*"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [{
-    "matches": ["https://id.jobstreet.com/*"],
+    "matches": ["https://id.jobstreet.com/*", "https://glints.com/*", "https://www.glints.com/*"],
     "js": ["content.js"],
     "run_at": "document_idle"
   }],
